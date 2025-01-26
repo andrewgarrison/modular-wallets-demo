@@ -1,101 +1,235 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { arbitrumSepolia } from "viem/chains";
+import { createPublicClient } from "viem";
+import {
+  createBundlerClient,
+  SmartAccount,
+  toWebAuthnAccount,
+} from "viem/account-abstraction";
+import {
+  toCircleSmartAccount,
+  toModularTransport,
+  toPasskeyTransport,
+  toWebAuthnCredential,
+  WebAuthnMode,
+} from "@circle-fin/modular-wallets-core";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LoginForm } from "@/components/login-form";
+import { RegisterForm } from "@/components/register-form";
+import { WalletDashboard } from "@/components/wallet-dashboard";
+import { useToast } from "@/hooks/use-toast";
+
+// Initialize Circle client
+const clientKey = process.env.NEXT_PUBLIC_CIRCLE_CLIENT_KEY as string;
+const clientUrl = process.env.NEXT_PUBLIC_CIRCLE_CLIENT_URL as string;
+
+// Create Circle transports
+const passkeyTransport = toPasskeyTransport(clientUrl, clientKey);
+const modularTransport = toModularTransport(
+  `${clientUrl}/arbitrumSepolia`,
+  clientKey
+);
+
+// Create a bundler client
+const bundlerClient = createBundlerClient({
+  chain: arbitrumSepolia,
+  transport: modularTransport,
+});
+
+// Create a public client
+const client = createPublicClient({
+  chain: arbitrumSepolia,
+  transport: modularTransport,
+});
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [account, setAccount] = useState<SmartAccount>();
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+  useEffect(() => {
+    // Check for existing credential in localStorage
+    const checkExistingCredential = async () => {
+      const storedCredential = localStorage.getItem("credential");
+      const storedUsername = localStorage.getItem("username");
+
+      if (storedCredential) {
+        try {
+          setLoading(true);
+          const credential = JSON.parse(storedCredential);
+          const owner = toWebAuthnAccount({ credential });
+
+          const circleAccount = await toCircleSmartAccount({
+            client,
+            owner,
+            name: storedUsername ?? undefined,
+          });
+
+          setAccount(circleAccount);
+        } catch (error) {
+          console.error("Error restoring session:", error);
+          localStorage.removeItem("credential");
+          localStorage.removeItem("username");
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    checkExistingCredential();
+  }, []);
+
+  const handleLogin = async () => {
+    try {
+      setLoading(true);
+      const credential = await toWebAuthnCredential({
+        transport: passkeyTransport,
+        mode: WebAuthnMode.Login,
+      });
+
+      localStorage.setItem("credential", JSON.stringify(credential));
+
+      const owner = toWebAuthnAccount({ credential });
+      const circleAccount = await toCircleSmartAccount({
+        client,
+        owner,
+      });
+
+      setAccount(circleAccount);
+      toast({
+        title: "Success",
+        description: "Successfully logged in to your wallet",
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to login. Please try again.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (username: string) => {
+    try {
+      setLoading(true);
+      const credential = await toWebAuthnCredential({
+        transport: passkeyTransport,
+        mode: WebAuthnMode.Register,
+        username,
+      });
+
+      localStorage.setItem("credential", JSON.stringify(credential));
+      localStorage.setItem("username", username);
+
+      const owner = toWebAuthnAccount({ credential });
+      const circleAccount = await toCircleSmartAccount({
+        client,
+        owner,
+        name: username,
+      });
+
+      setAccount(circleAccount);
+      toast({
+        title: "Success",
+        description: "Successfully created your wallet",
+      });
+    } catch (error) {
+      console.error("Registration error:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to create wallet. Please try again.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("credential");
+    localStorage.removeItem("username");
+    setAccount(undefined);
+    toast({
+      title: "Logged out",
+      description: "Successfully logged out of your wallet",
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          <Card className="w-[350px]">
+            <CardContent className="p-6">
+              <div className="flex flex-col items-center space-y-4">
+                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+                <p className="text-sm text-muted-foreground">Loading...</p>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (account) {
+    return (
+      <WalletDashboard
+        account={account}
+        bundlerClient={bundlerClient}
+        client={client}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <Card className="w-[350px]">
+          <CardHeader>
+            <CardTitle>Modular Wallet Demo</CardTitle>
+            <CardDescription>
+              Login or create a new wallet using your passkey
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="login">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="login">Login</TabsTrigger>
+                <TabsTrigger value="register">Register</TabsTrigger>
+              </TabsList>
+              <TabsContent value="login">
+                <LoginForm onSubmit={handleLogin} />
+              </TabsContent>
+              <TabsContent value="register">
+                <RegisterForm onSubmit={handleRegister} />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
   );
 }
