@@ -1,8 +1,5 @@
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
   title: "Circle Modular Wallet Demo",
@@ -17,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className="font-inter">
         <main className="min-h-screen bg-background">{children}</main>
         <Toaster />
       </body>
