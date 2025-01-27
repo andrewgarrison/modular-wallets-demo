@@ -1,6 +1,6 @@
 # Modular Wallets Demo
 
-This project demonstrates how to build a gasless transaction experience using Circle's Smart Contract Wallet infrastructure. It allows users to send USDC on Arbitrum Sepolia without requiring native tokens (ETH) for gas fees.
+This project demonstrates how to create and interact with modular smart contract wallets using Circle's Modular Wallets SDK. The demo showcases how to build a user-friendly wallet experience that enables gasless USDC transfers on Arbitrum Sepolia, highlighting the flexibility and simplicity of Circle's modular wallet infrastructure.
 
 ## Features
 
