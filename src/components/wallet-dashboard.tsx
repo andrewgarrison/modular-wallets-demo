@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Loader2,
+  ArrowUpRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -44,7 +45,7 @@ const ARBITRUM_SEPOLIA_USDC: Address =
   "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d";
 const USDC_DECIMALS = 6;
 
-type ViewState = "overview" | "gasless";
+type ViewState = "overview" | "gasless" | "tx_success";
 
 export function WalletDashboard({
   account,
@@ -59,6 +60,7 @@ export function WalletDashboard({
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState<ViewState>("overview");
+  const [txHash, setTxHash] = useState<string>("");
   const { toast } = useToast();
 
   const copyToClipboard = async (text: string) => {
@@ -129,14 +131,10 @@ export function WalletDashboard({
         hash,
       });
 
-      toast({
-        title: "Transaction Sent",
-        description: `Tx Hash: ${receipt.transactionHash}`,
-      });
-
       setRecipient("");
       setAmount("");
-      setView("overview");
+      setTxHash(receipt.transactionHash);
+      setView("tx_success");
     } catch (error) {
       console.error("Transaction error:", error);
       toast({
@@ -211,6 +209,63 @@ export function WalletDashboard({
           )}
         </Button>
       </form>
+    </motion.div>
+  );
+
+  const renderTransactionSuccess = () => (
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 20 }}
+      className="text-center"
+    >
+      <div className="space-y-8">
+        <div className="flex justify-center">
+          <div className="rounded-full bg-green-100 p-3">
+            <Check className="h-8 w-8 text-green-600" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">Transaction Hash</p>
+          <div className="flex items-center justify-between rounded-lg bg-muted p-3 font-mono text-sm">
+            <span className="truncate">{txHash}</span>
+            <button
+              onClick={() => copyToClipboard(txHash)}
+              className="ml-2 rounded-md p-1 hover:bg-muted-foreground/20"
+            >
+              {copied ? (
+                <Check className="h-4 w-4 text-green-500" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <a
+            href={`https://sepolia.arbiscan.io/tx/${txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center space-x-2 text-sm text-blue-600 hover:text-blue-800"
+          >
+            View on Arbiscan
+            <ArrowUpRight className="h-4 w-4 ml-1" />
+          </a>
+          <div>
+            <Button
+              onClick={() => {
+                setView("overview");
+                setAmount("");
+                setRecipient("");
+                setTxHash("");
+              }}
+              className="mt-4"
+            >
+              Return to Overview
+            </Button>
+          </div>
+        </div>
+      </div>
     </motion.div>
   );
 
@@ -307,8 +362,12 @@ export function WalletDashboard({
                     </CardHeader>
                   </Card>
                 </motion.div>
-              ) : (
+              ) : view === "gasless" ? (
                 <motion.div key="gasless">{renderTransactionForm()}</motion.div>
+              ) : (
+                <motion.div key="tx_success">
+                  {renderTransactionSuccess()}
+                </motion.div>
               )}
             </AnimatePresence>
           </CardContent>
